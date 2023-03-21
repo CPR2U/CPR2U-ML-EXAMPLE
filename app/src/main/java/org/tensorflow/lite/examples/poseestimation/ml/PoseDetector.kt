@@ -20,7 +20,7 @@ import android.graphics.Bitmap
 import org.tensorflow.lite.examples.poseestimation.data.Person
 
 /**
- * 자세 인식 인터페이스
+ * 자세 인식 모델 인터페이스
  */
 interface PoseDetector : AutoCloseable {
 

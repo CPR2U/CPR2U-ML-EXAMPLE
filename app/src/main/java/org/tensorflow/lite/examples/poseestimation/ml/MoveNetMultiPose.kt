@@ -38,6 +38,9 @@ import org.tensorflow.lite.support.image.ops.ResizeWithCropOrPadOp
 import org.tensorflow.lite.support.tensorbuffer.TensorBuffer
 import kotlin.math.ceil
 
+/**
+ * 여러 사람의 자세를 추출하는 클래스(사용 X)
+ */
 class MoveNetMultiPose(
     private val interpreter: Interpreter,
     private val type: Type,

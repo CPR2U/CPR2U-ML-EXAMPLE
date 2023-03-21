@@ -36,6 +36,9 @@ import org.tensorflow.lite.support.image.ops.ResizeOp
 import org.tensorflow.lite.support.image.ops.ResizeWithCropOrPadOp
 import kotlin.math.exp
 
+/**
+ * PoseDetector 인터페이스를 구현해 이미지/비디오에서 자세를 추출하는 모델 동작(건드릴 부분 없음)
+ */
 class PoseNet(private val interpreter: Interpreter, private var gpuDelegate: GpuDelegate?) :
     PoseDetector {
 
@@ -78,7 +81,9 @@ class PoseNet(private val interpreter: Interpreter, private var gpuDelegate: Gpu
     private var cropWidth = 0f
     private var cropSize = 0
 
-    // 프레임(비트맵)을 파라미터로 받아 자세인식
+    /**
+     * 프레임(비트맵)을 파라미터로 받아 자세 인식
+     */
     @Suppress("UNCHECKED_CAST")
     override fun estimatePoses(bitmap: Bitmap): List<Person> {
         val estimationStartTimeNanos = SystemClock.elapsedRealtimeNanos()

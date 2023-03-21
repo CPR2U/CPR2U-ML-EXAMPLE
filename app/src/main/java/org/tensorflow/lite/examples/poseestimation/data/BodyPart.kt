@@ -17,7 +17,7 @@ limitations under the License.
 package org.tensorflow.lite.examples.poseestimation.data
 
 /**
- * 사용할 관절 종류
+ * 우리가 CPR2U에 사용해야 할 관절 종류
  * LEFT_SHOULDER(5),
  * RIGHT_SHOULDER(6),
  * LEFT_ELBOW(7),

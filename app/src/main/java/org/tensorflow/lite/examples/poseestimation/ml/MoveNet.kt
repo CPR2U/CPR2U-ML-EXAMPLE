@@ -37,7 +37,10 @@ enum class ModelType {
     Lightning,
     Thunder
 }
-// 실제 ML 모델 구동 클래스
+
+/**
+ * 실제 ML 모델 구동 클래스 (Posenet 클래스와 같은 역할)
+ */
 class MoveNet(private val interpreter: Interpreter, private var gpuDelegate: GpuDelegate?) :
     PoseDetector {
 

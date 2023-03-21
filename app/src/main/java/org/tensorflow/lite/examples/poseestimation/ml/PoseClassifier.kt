@@ -22,7 +22,9 @@ import org.tensorflow.lite.Interpreter
 import org.tensorflow.lite.examples.poseestimation.data.Person
 import org.tensorflow.lite.support.common.FileUtil
 
-// 추정된 자세에서 자세 종류를 분류하는 클래스(현재 자세가 코브라 자세인지, 의자 자세인지, 전사 자세인지 등)
+/**
+ * PoseNet에서 추출한 데이터로 자세의 종류를 분류하는 클래스(현재 자세가 코브라 자세인지, 의자 자세인지, 전사 자세인지 등.. 건드릴 필요 없음)
+ */
 class PoseClassifier(
     private val interpreter: Interpreter,
     private val labels: List<String>

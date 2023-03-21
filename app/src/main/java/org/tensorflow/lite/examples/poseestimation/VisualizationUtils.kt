@@ -25,6 +25,9 @@ import org.tensorflow.lite.examples.poseestimation.data.BodyPart
 import org.tensorflow.lite.examples.poseestimation.data.Person
 import kotlin.math.max
 
+/**
+ * 이미지 또는 비디오 위에 점과 선으로 관절 데이터를 그린다.
+ */
 object VisualizationUtils {
     /** Radius of circle used to draw keypoints.  */
     private const val CIRCLE_RADIUS = 6f

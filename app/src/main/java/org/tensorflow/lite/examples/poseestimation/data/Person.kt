@@ -19,7 +19,7 @@ package org.tensorflow.lite.examples.poseestimation.data
 import android.graphics.RectF
 
 /**
- * 인식된 사람의 자세 정보를 관리하는 클래스
+ * 카메라 속 사람의 자세 데이터를 저장하는 클래스
  * @param keyPoints: 사람의 관절 포인트
  * @param boundingBox: 사람 전체를 둘러싸는 사각형 (Multipose 모델에서만 사용)
  * @param score: 인식 정확도

@@ -54,6 +54,8 @@ class MainActivity : AppCompatActivity() {
      * 1 == MoveNet Thunder model
      * 2 == MoveNet MultiPose model
      * 3 == PoseNet model
+     *
+     * => 1(Movenet Thunder)를 사용할 것. 제일 정확도가 높음.
      **/
     private var modelPos = 1
 
@@ -74,11 +76,16 @@ class MainActivity : AppCompatActivity() {
     private var cameraSource: CameraSource? = null
     private var isClassifyPose = false
 
-    private var max = 0f
-    private var min = 0f
+    /**
+     * CPR 자세 인식에 필요한 변수들
+     */
+    private var maxHeight = 0f
+    private var minHeight = 0f
     private var beforeWrist = 0f
     private var increased = true
     private var wristList = arrayListOf<Float>()
+
+    private final val TAG = "CPR2U"
 
     private val requestPermissionLauncher =
         registerForActivityResult(
@@ -205,7 +212,7 @@ class MainActivity : AppCompatActivity() {
                             poseLabels: List<Pair<String, Float>>?,
                             persons: List<org.tensorflow.lite.examples.poseestimation.data.Person>
                         ) {
-                            // tvScore: 자세 인식 성능 점수
+                            // tvScore: 자세 인식 모델의 정확도 점수
                             tvScore.text = getString(R.string.tfe_pe_tv_score, personScore ?: 0f)
 
                             // tvClassificationValue1~3: 내가 선택한 ML 모델 옵션(CPU/GPU, 모델 종류 등)
@@ -224,7 +231,12 @@ class MainActivity : AppCompatActivity() {
                                 )
                             }
 
-                            measureArmAngle(persons[0])
+                            /**
+                             * TODO: 여기서부터 CPR 자세 인식 코드 시작
+                             * persons에 더 많은 person 데이터가 있을 수록 정확도가 높아진다.
+                             * persons의 0번째에 있는 데이터를 가져와 자세를 분석한다.
+                             */
+                            measureCprScore(persons[0])
                         }
                     }).apply {
                         prepareCamera()
@@ -238,7 +250,10 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun measureArmAngle(person: Person) {
+    /**
+     * CPR 자세 인식
+     */
+    private fun measureCprScore(person: Person) {
         var xShoulder = .0f;
         var yShoulder = .0f;
         var xElbow = .0f;
@@ -246,6 +261,7 @@ class MainActivity : AppCompatActivity() {
         var xWrist = .0f;
         var yWrist = .0f;
 
+        // person이 갖고 있는 관절 데이터들에서 어깨, 팔꿈치, 손목 데이터 추출 (현재 임시로 왼쪽 관절만 추출한 상태)
         person.keyPoints.forEach { point ->
             when (point.bodyPart) {
                 BodyPart.LEFT_SHOULDER -> {
@@ -262,27 +278,32 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
-        Log.i("CPR2U", "Shoulder: ($xShoulder) Elbow: ($xElbow) Wrist: ($xWrist)")
+
+        // 어깨, 팔꿈치, 손목이 일직선인지 x 값으로 확인한다. (약간의 노이즈 발생으로 인해 10의 여유를 둠)
         var isCorrect = xShoulder - xElbow < 10 && xElbow - xWrist < 10;
-        if (isCorrect) {
-            Log.i("CPR2U", "올바른 자세에요!")
-        } else {
-            Log.i("CPR2U", "팔을 90도로 유지하세요!")
+        if (isCorrect) Log.i(TAG, "올바른 자세에요!")
+        else Log.i(TAG, "팔을 90도로 유지하세요!")
+
+        // 손목의 높이가 상승 곡선에서 꼭짓점을 찍고 하강하는 경우
+        if (increased && beforeWrist > yWrist + 1) {
+            increased = false
+            maxHeight = yWrist
+        }
+        // 손목의 높이가 하강 곡선에서 꼭짓점을 찍고 상승하는 경우
+        else if (!increased && beforeWrist < yWrist - 1) {
+            increased = true
+            minHeight = yWrist
+
+            // wristList에 ${손목의 최대 높이 - 손목의 최소 높이}를 저장
+            wristList.add(maxHeight - minHeight)
+
+            // wristList에 저장된 깊이 값으로 CPR 깊이가 적절한지 확인한다.
+            // wristList에 저장된 값의 개수로 CPR 속도(2분 동안 CPR한 횟수)가 적절한지 확인한다.
+            Log.i(TAG, "현재 손목 깊이: ${maxHeight-minHeight}, max: $maxHeight, min: $minHeight")
         }
 
         if (increased) Log.i("CPR2U", "손목이 상승 중입니다.")
-        else Log.i("CPR2U", "손목이 하강 중입니다.")
-
-        if (increased && beforeWrist > yWrist + 1) {
-            increased = false
-            max = yWrist
-        }
-        else if (!increased && beforeWrist < yWrist - 1) {
-            increased = true
-            min = yWrist
-            wristList.add(max - min)
-            Log.i("CPR2U", "현재 손목 깊이: ${max-min}, max: $max, min: $min")
-        }
+        else Log.i(TAG, "손목이 하강 중입니다.")
 
         beforeWrist = yWrist
     }
@@ -292,7 +313,7 @@ class MainActivity : AppCompatActivity() {
         return "${pair.first} (${String.format("%.2f", pair.second)})"
     }
 
-    // 자세 분석 기능(코브라, 의자, 전사자세)
+    // Tensorflow Lite Example에서 기본적으로 제공하는 자세 분석 기능(코브라, 의자, 전사자세)
     private fun isPoseClassifier() {
         cameraSource?.setClassifier(if (isClassifyPose) PoseClassifier.create(this) else null)
     }

@@ -19,7 +19,7 @@ package org.tensorflow.lite.examples.poseestimation.data
 import android.graphics.PointF
 
 /**
- * 사진 위에 표현되는 관절 노드
+ * 사진 위에 표현되는 관절 노드(점)
  * @param bodyPart: 관절 종류,
  * @param coordinate: x, y 좌표
  * @param score: 정확도
