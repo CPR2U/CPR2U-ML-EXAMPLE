@@ -1,3 +1,90 @@
+# 현재 코드
+
+MainActivity.kt에서 `private fun measureCprScore(person: Person)` 코드만 확인하면 됩니다
+
+위치 : tensorflow > examples > poseestimatin > MainActivity.kt
+
+```kotlin
+// person이 갖고 있는 관절 데이터들에서 어깨, 팔꿈치, 손목 데이터 추출 (현재 임시로 왼쪽 관절만 추출한 상태)
+        person.keyPoints.forEach { point ->
+            when (point.bodyPart) {
+                BodyPart.LEFT_SHOULDER -> {
+                    xShoulder = point.coordinate.x
+                    yShoulder = point.coordinate.y
+                }
+                BodyPart.LEFT_ELBOW -> {
+                    xElbow = point.coordinate.x
+                    yElbow = point.coordinate.y
+                }
+                BodyPart.LEFT_WRIST -> {
+                    xWrist = point.coordinate.x
+                    yWrist = point.coordinate.y
+                }
+                else -> {}
+            }
+        }
+```
+
+```kotlin
+// 일직선 판별
+        var isCorrect = xShoulder - xElbow < 20 && xElbow - xWrist < 20
+        if (isCorrect) {
+            Log.i(TAG, "올바른 자세에요!")
+            // TODO : 맞은 횟수 세기
+            correctAngle++
+        } else {
+            Log.i(TAG, "팔을 90도로 유지하세요!")
+            // TODO : 틀린 횟수 세기
+            incorrectAngle++
+        }
+```
+
+```kotlin
+// 손목의 높이가 상승 곡선에서 꼭짓점을 찍고 하강하는 경우
+        if (increased && beforeWrist > yWrist + 1) {
+            increased = false
+            maxHeight = yWrist
+        }
+        // 손목의 높이가 하강 곡선에서 꼭짓점을 찍고 상승하는 경우
+        else if (!increased && beforeWrist < yWrist - 1) {
+            increased = true
+            minHeight = yWrist
+
+            val num = if (maxHeight > minHeight) maxHeight - minHeight else minHeight - maxHeight
+            wristList.add(num)
+            Log.e(TAG, "${wristList.last()}")
+        }
+```
+
+필요한 신체부위를 찾을때는 `BodyPart`에서 찾으면 됩니다
+
+위치 : tensorflow > examples > poseestimatin > data > BodyPart.kt
+```kotlin
+enum class BodyPart(val position: Int) {
+    NOSE(0),
+    LEFT_EYE(1),
+    RIGHT_EYE(2),
+    LEFT_EAR(3),
+    RIGHT_EAR(4),
+    LEFT_SHOULDER(5),
+    RIGHT_SHOULDER(6),
+    LEFT_ELBOW(7),
+    RIGHT_ELBOW(8),
+    LEFT_WRIST(9),
+    RIGHT_WRIST(10),
+    LEFT_HIP(11),
+    RIGHT_HIP(12),
+    LEFT_KNEE(13),
+    RIGHT_KNEE(14),
+    LEFT_ANKLE(15),
+    RIGHT_ANKLE(16);
+    companion object{
+        private val map = values().associateBy(BodyPart::position)
+        fun fromInt(position: Int): BodyPart = map.getValue(position)
+    }
+}
+```
+
 # TensorFlow Lite Pose Estimation Android Demo
 
 ### Overview
