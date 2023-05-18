@@ -26,7 +26,12 @@ import android.util.Log
 import android.view.SurfaceView
 import android.view.View
 import android.view.WindowManager
-import android.widget.*
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
+import android.widget.CompoundButton
+import android.widget.Spinner
+import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
@@ -39,7 +44,13 @@ import org.tensorflow.lite.examples.poseestimation.camera.CameraSource
 import org.tensorflow.lite.examples.poseestimation.data.BodyPart
 import org.tensorflow.lite.examples.poseestimation.data.Device
 import org.tensorflow.lite.examples.poseestimation.data.Person
-import org.tensorflow.lite.examples.poseestimation.ml.*
+import org.tensorflow.lite.examples.poseestimation.ml.ModelType
+import org.tensorflow.lite.examples.poseestimation.ml.MoveNet
+import org.tensorflow.lite.examples.poseestimation.ml.MoveNetMultiPose
+import org.tensorflow.lite.examples.poseestimation.ml.PoseClassifier
+import org.tensorflow.lite.examples.poseestimation.ml.PoseNet
+import org.tensorflow.lite.examples.poseestimation.ml.TrackerType
+import org.tensorflow.lite.examples.poseestimation.ml.Type
 
 class MainActivity : AppCompatActivity() {
     companion object {
@@ -76,9 +87,10 @@ class MainActivity : AppCompatActivity() {
     private var cameraSource: CameraSource? = null
     private var isClassifyPose = false
 
-    /**
-     * CPR 자세 인식에 필요한 변수들
-     */
+    var correctAngle: Int = 0
+    var incorrectAngle: Int = 0
+    var compressionRate: Int = 0
+    var pressDepth: Int = 0
     private var maxHeight = 0f
     private var minHeight = 0f
     private var beforeWrist = 0f
@@ -89,7 +101,7 @@ class MainActivity : AppCompatActivity() {
 
     private val requestPermissionLauncher =
         registerForActivityResult(
-            ActivityResultContracts.RequestPermission()
+            ActivityResultContracts.RequestPermission(),
         ) { isGranted: Boolean ->
             if (isGranted) {
                 // Permission is granted. Continue the action or workflow in your
@@ -114,7 +126,7 @@ class MainActivity : AppCompatActivity() {
             parent: AdapterView<*>?,
             view: View?,
             position: Int,
-            id: Long
+            id: Long,
         ) {
             changeModel(position)
         }
@@ -193,7 +205,7 @@ class MainActivity : AppCompatActivity() {
         return checkPermission(
             Manifest.permission.CAMERA,
             Process.myPid(),
-            Process.myUid()
+            Process.myUid(),
         ) == PackageManager.PERMISSION_GRANTED
     }
 
@@ -202,46 +214,32 @@ class MainActivity : AppCompatActivity() {
         if (isCameraPermissionGranted()) {
             if (cameraSource == null) {
                 cameraSource =
-                    CameraSource(surfaceView, object : CameraSource.CameraSourceListener {
-                        override fun onFPSListener(fps: Int) {
-                            tvFPS.text = getString(R.string.tfe_pe_tv_fps, fps)
-                        }
-
-                        override fun onDetectedInfo(
-                            personScore: Float?,
-                            poseLabels: List<Pair<String, Float>>?,
-                            persons: List<org.tensorflow.lite.examples.poseestimation.data.Person>
-                        ) {
-                            // tvScore: 자세 인식 모델의 정확도 점수
-                            tvScore.text = getString(R.string.tfe_pe_tv_score, personScore ?: 0f)
-
-                            // tvClassificationValue1~3: 내가 선택한 ML 모델 옵션(CPU/GPU, 모델 종류 등)
-                            poseLabels?.sortedByDescending { it.second }?.let {
-                                tvClassificationValue1.text = getString(
-                                    R.string.tfe_pe_tv_classification_value,
-                                    convertPoseLabels(if (it.isNotEmpty()) it[0] else null)
-                                )
-                                tvClassificationValue2.text = getString(
-                                    R.string.tfe_pe_tv_classification_value,
-                                    convertPoseLabels(if (it.size >= 2) it[1] else null)
-                                )
-                                tvClassificationValue3.text = getString(
-                                    R.string.tfe_pe_tv_classification_value,
-                                    convertPoseLabels(if (it.size >= 3) it[2] else null)
-                                )
+                    CameraSource(
+                        surfaceView,
+                        object : CameraSource.CameraSourceListener {
+                            override fun onFPSListener(fps: Int) {
+//                                tvFPS.text = getString(R.string.tfe_pe_tv_fps, fps)
                             }
 
-                            /**
-                             * TODO: 여기서부터 CPR 자세 인식 코드 시작
-                             * persons에 더 많은 person 데이터가 있을 수록 정확도가 높아진다.
-                             * persons의 0번째에 있는 데이터를 가져와 자세를 분석한다.
-                             */
-                            measureCprScore(persons[0])
-                        }
-                    }).apply {
+                            override fun onDetectedInfo(
+                                personScore: Float?,
+                                poseLabels: List<Pair<String, Float>>?,
+                                persons: List<Person>,
+                            ) {
+                                // tvScore: 자세 인식 모델의 정확도 점수
+                                tvScore.text =
+                                    getString(R.string.tfe_pe_tv_score, personScore ?: 0f)
+                                /**
+                                 * TODO: 여기서부터 CPR 자세 인식 코드 시작
+                                 * persons에 더 많은 person 데이터가 있을 수록 정확도가 높아진다.
+                                 * persons의 0번째에 있는 데이터를 가져와 자세를 분석한다.
+                                 */
+                                measureCprScore(persons[0])
+                            }
+                        },
+                    ).apply {
                         prepareCamera()
                     }
-                isPoseClassifier()
                 lifecycleScope.launch(Dispatchers.Main) {
                     cameraSource?.initCamera()
                 }
@@ -254,12 +252,12 @@ class MainActivity : AppCompatActivity() {
      * CPR 자세 인식
      */
     private fun measureCprScore(person: Person) {
-        var xShoulder = .0f;
-        var yShoulder = .0f;
-        var xElbow = .0f;
-        var yElbow = .0f;
-        var xWrist = .0f;
-        var yWrist = .0f;
+        var xShoulder = .0f
+        var yShoulder = .0f
+        var xElbow = .0f
+        var yElbow = .0f
+        var xWrist = .0f
+        var yWrist = .0f
 
         // person이 갖고 있는 관절 데이터들에서 어깨, 팔꿈치, 손목 데이터 추출 (현재 임시로 왼쪽 관절만 추출한 상태)
         person.keyPoints.forEach { point ->
@@ -276,13 +274,21 @@ class MainActivity : AppCompatActivity() {
                     xWrist = point.coordinate.x
                     yWrist = point.coordinate.y
                 }
+                else -> {}
             }
         }
 
-        // 어깨, 팔꿈치, 손목이 일직선인지 x 값으로 확인한다. (약간의 노이즈 발생으로 인해 10의 여유를 둠)
-        var isCorrect = xShoulder - xElbow < 10 && xElbow - xWrist < 10;
-        if (isCorrect) Log.i(TAG, "올바른 자세에요!")
-        else Log.i(TAG, "팔을 90도로 유지하세요!")
+        // 일직선 판별
+        var isCorrect = xShoulder - xElbow < 20 && xElbow - xWrist < 20
+        if (isCorrect) {
+            Log.i(TAG, "올바른 자세에요!")
+            // TODO : 맞은 횟수 세기
+            correctAngle++
+        } else {
+            Log.i(TAG, "팔을 90도로 유지하세요!")
+            // TODO : 틀린 횟수 세기
+            incorrectAngle++
+        }
 
         // 손목의 높이가 상승 곡선에서 꼭짓점을 찍고 하강하는 경우
         if (increased && beforeWrist > yWrist + 1) {
@@ -294,16 +300,10 @@ class MainActivity : AppCompatActivity() {
             increased = true
             minHeight = yWrist
 
-            // wristList에 ${손목의 최대 높이 - 손목의 최소 높이}를 저장
-            wristList.add(maxHeight - minHeight)
-
-            // wristList에 저장된 깊이 값으로 CPR 깊이가 적절한지 확인한다.
-            // wristList에 저장된 값의 개수로 CPR 속도(2분 동안 CPR한 횟수)가 적절한지 확인한다.
-            Log.i(TAG, "현재 손목 깊이: ${maxHeight-minHeight}, max: $maxHeight, min: $minHeight")
+            val num = if (maxHeight > minHeight) maxHeight - minHeight else minHeight - maxHeight
+            wristList.add(num)
+            Log.e(TAG, "${wristList.last()}")
         }
-
-        if (increased) Log.i("CPR2U", "손목이 상승 중입니다.")
-        else Log.i(TAG, "손목이 하강 중입니다.")
 
         beforeWrist = yWrist
     }
@@ -323,7 +323,7 @@ class MainActivity : AppCompatActivity() {
         ArrayAdapter.createFromResource(
             this,
             R.array.tfe_pe_models_array,
-            android.R.layout.simple_spinner_item
+            android.R.layout.simple_spinner_item,
         ).also { adapter ->
             // Specify the layout to use when the list of choices appears
             adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
@@ -334,7 +334,8 @@ class MainActivity : AppCompatActivity() {
 
         ArrayAdapter.createFromResource(
             this,
-            R.array.tfe_pe_device_name, android.R.layout.simple_spinner_item
+            R.array.tfe_pe_device_name,
+            android.R.layout.simple_spinner_item,
         ).also { adaper ->
             adaper.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
 
@@ -344,7 +345,8 @@ class MainActivity : AppCompatActivity() {
 
         ArrayAdapter.createFromResource(
             this,
-            R.array.tfe_pe_tracker_array, android.R.layout.simple_spinner_item
+            R.array.tfe_pe_tracker_array,
+            android.R.layout.simple_spinner_item,
         ).also { adaper ->
             adaper.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
 
@@ -379,7 +381,7 @@ class MainActivity : AppCompatActivity() {
                 1 -> TrackerType.BOUNDING_BOX
                 2 -> TrackerType.KEYPOINTS
                 else -> TrackerType.OFF
-            }
+            },
         )
     }
 
@@ -395,6 +397,7 @@ class MainActivity : AppCompatActivity() {
                 showTracker(false)
                 MoveNet.create(this, device, ModelType.Lightning)
             }
+
             1 -> {
                 // MoveNet Thunder (SinglePose)
                 showPoseClassifier(true)
@@ -402,6 +405,7 @@ class MainActivity : AppCompatActivity() {
                 showTracker(false)
                 MoveNet.create(this, device, ModelType.Thunder)
             }
+
             2 -> {
                 // MoveNet (Lightning) MultiPose
                 showPoseClassifier(false)
@@ -414,9 +418,10 @@ class MainActivity : AppCompatActivity() {
                 MoveNetMultiPose.create(
                     this,
                     device,
-                    Type.Dynamic
+                    Type.Dynamic,
                 )
             }
+
             3 -> {
                 // PoseNet (SinglePose)
                 showPoseClassifier(true)
@@ -424,6 +429,7 @@ class MainActivity : AppCompatActivity() {
                 showTracker(false)
                 PoseNet.create(this, device)
             }
+
             else -> {
                 null
             }
@@ -471,16 +477,18 @@ class MainActivity : AppCompatActivity() {
         when (PackageManager.PERMISSION_GRANTED) {
             ContextCompat.checkSelfPermission(
                 this,
-                Manifest.permission.CAMERA
-            ) -> {
+                Manifest.permission.CAMERA,
+                ),
+            -> {
                 // You can use the API that requires the permission.
                 openCamera()
             }
+
             else -> {
                 // You can directly ask for the permission.
                 // The registered ActivityResultCallback gets the result of this request.
                 requestPermissionLauncher.launch(
-                    Manifest.permission.CAMERA
+                    Manifest.permission.CAMERA,
                 )
             }
         }
