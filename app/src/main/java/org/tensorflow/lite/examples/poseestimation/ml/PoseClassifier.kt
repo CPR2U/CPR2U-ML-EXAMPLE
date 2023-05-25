@@ -22,9 +22,6 @@ import org.tensorflow.lite.Interpreter
 import org.tensorflow.lite.examples.poseestimation.data.Person
 import org.tensorflow.lite.support.common.FileUtil
 
-/**
- * PoseNet에서 추출한 데이터로 자세의 종류를 분류하는 클래스(현재 자세가 코브라 자세인지, 의자 자세인지, 전사 자세인지 등.. 건드릴 필요 없음)
- */
 class PoseClassifier(
     private val interpreter: Interpreter,
     private val labels: List<String>
@@ -33,8 +30,10 @@ class PoseClassifier(
     private val output = interpreter.getOutputTensor(0).shape()
 
     companion object {
-        private const val MODEL_FILENAME = "classifier.tflite"
-        private const val LABELS_FILENAME = "labels.txt"
+        // 사용할 모델 파일명 입력
+        private const val MODEL_FILENAME = "pose_classifier.tflite"
+        // 사용할 라벨 파일명 입력
+        private const val LABELS_FILENAME = "pose_labels.txt"
         private const val CPU_NUM_THREADS = 4
 
         fun create(context: Context): PoseClassifier {

@@ -20,6 +20,7 @@ import android.Manifest
 import android.app.AlertDialog
 import android.app.Dialog
 import android.content.pm.PackageManager
+import android.graphics.PointF
 import android.os.Bundle
 import android.os.Process
 import android.util.Log
@@ -51,6 +52,7 @@ import org.tensorflow.lite.examples.poseestimation.ml.PoseClassifier
 import org.tensorflow.lite.examples.poseestimation.ml.PoseNet
 import org.tensorflow.lite.examples.poseestimation.ml.TrackerType
 import org.tensorflow.lite.examples.poseestimation.ml.Type
+import kotlin.math.abs
 
 class MainActivity : AppCompatActivity() {
     companion object {
@@ -226,9 +228,29 @@ class MainActivity : AppCompatActivity() {
                                 poseLabels: List<Pair<String, Float>>?,
                                 persons: List<Person>,
                             ) {
-                                // tvScore: 자세 인식 모델의 정확도 점수
-                                tvScore.text =
-                                    getString(R.string.tfe_pe_tv_score, personScore ?: 0f)
+                                tvScore.text = getString(R.string.tfe_pe_tv_score, personScore ?: 0f)
+
+                                // TODO: poseLabels: 현재 취하고 있는 자세 타입에 대한 정보를 Pair(label, percent) 타입으로 제공
+                                // TODO: ex) poseLabels = {{"cpr", 0.94}, {"not_cpr", 0.06}}
+                                poseLabels?.sortedByDescending { it.second }?.let {
+                                    // tvClassificationValue1~3: 현재 취하고 있는 자세 타입 1,2,3 순위 표시
+                                    // if(it[0].first == "cpr") {
+                                        // 3초 카운팅 시작
+                                    // }
+                                    tvClassificationValue1.text = getString(
+                                        R.string.tfe_pe_tv_classification_value,
+                                        convertPoseLabels(if (it.isNotEmpty()) it[0] else null)
+                                    )
+                                    tvClassificationValue2.text = getString(
+                                        R.string.tfe_pe_tv_classification_value,
+                                        convertPoseLabels(if (it.size >= 2) it[1] else null)
+                                    )
+                                    tvClassificationValue3.text = getString(
+                                        R.string.tfe_pe_tv_classification_value,
+                                        convertPoseLabels(if (it.size >= 3) it[2] else null)
+                                    )
+                                }
+
                                 /**
                                  * TODO: 여기서부터 CPR 자세 인식 코드 시작
                                  * persons에 더 많은 person 데이터가 있을 수록 정확도가 높아진다.
@@ -278,8 +300,91 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // 일직선 판별
-        var isCorrect = xShoulder - xElbow < 20 && xElbow - xWrist < 20
+        measureIsPreparing(person)
+        //measureElbowDegree(person)
+        //measureCprRate(person)
+    }
+
+    private fun measureCprRate(person: Person) {
+        lateinit var wrist: PointF
+
+        person.keyPoints.forEach { point ->
+            when (point.bodyPart) {
+                BodyPart.LEFT_WRIST -> { wrist = point.coordinate }
+                else -> {}
+            }
+        }
+
+        // 손목의 높이가 상승 곡선에서 꼭짓점을 찍고 하강하는 경우
+        if (increased && beforeWrist > wrist.y + 1) {
+            increased = false
+            maxHeight = wrist.y
+        }
+        // 손목의 높이가 하강 곡선에서 꼭짓점을 찍고 상승하는 경우
+        else if (!increased && beforeWrist < wrist.y - 1) {
+            increased = true
+            minHeight = wrist.y
+
+            val num = if (maxHeight > minHeight) maxHeight - minHeight else minHeight - maxHeight
+            wristList.add(num)
+            Log.e(TAG, "${wristList.last()}")
+        }
+
+        beforeWrist = wrist.y
+    }
+
+    private fun measureIsPreparing(person: Person) : Boolean {
+        lateinit var shoulder: PointF
+        lateinit var elbow: PointF
+        lateinit var wrist: PointF
+        lateinit var hip: PointF
+        lateinit var knee: PointF
+        lateinit var ankle: PointF
+
+        person.keyPoints.forEach { point ->
+            when (point.bodyPart) {
+                BodyPart.LEFT_SHOULDER -> { shoulder = point.coordinate }
+                BodyPart.LEFT_ELBOW -> { elbow = point.coordinate }
+                BodyPart.LEFT_WRIST -> { wrist = point.coordinate }
+                BodyPart.LEFT_HIP -> { hip = point.coordinate }
+                BodyPart.LEFT_KNEE -> { knee = point.coordinate }
+                BodyPart.LEFT_ANKLE -> { ankle = point.coordinate }
+                else -> {}
+            }
+        }
+
+        var isElbowVertical = abs(shoulder.x - elbow.x) < 20 && abs(elbow.x - wrist.x) < 20
+        var isBodyVertical = shoulder.x < hip.x &&  shoulder.y > hip.y
+        var isSeated = knee.x < ankle.x
+
+        Log.i(TAG, "shoulder y: " + shoulder.y + ", hip y: " + hip.y)
+
+        Log.i(TAG, "팔이 수직인가요? " + isElbowVertical)
+        Log.i(TAG, "몸이 수직인가요? " + isElbowVertical)
+        Log.i(TAG, "앉아있나요? " + isElbowVertical)
+
+        if (!isElbowVertical || !isBodyVertical || !isSeated) return false
+
+        Log.i(TAG, "CPR 준비 완료")
+        return true
+    }
+
+    private fun measureElbowDegree(person: Person) {
+        // person이 갖고 있는 관절 데이터들에서 어깨, 팔꿈치, 손목 데이터 추출 (현재 임시로 왼쪽 관절만 추출한 상태)
+        lateinit var shoulder: PointF
+        lateinit var elbow: PointF
+        lateinit var wrist: PointF
+
+        person.keyPoints.forEach { point ->
+            when (point.bodyPart) {
+                BodyPart.LEFT_SHOULDER -> { shoulder = point.coordinate }
+                BodyPart.LEFT_ELBOW -> { elbow = point.coordinate }
+                BodyPart.LEFT_WRIST -> { wrist = point.coordinate }
+                else -> {}
+            }
+        }
+
+        var isCorrect = shoulder.x - elbow.x < 20 && elbow.x - wrist.x < 20
         if (isCorrect) {
             Log.i(TAG, "올바른 자세에요!")
             // TODO : 맞은 횟수 세기
@@ -289,23 +394,6 @@ class MainActivity : AppCompatActivity() {
             // TODO : 틀린 횟수 세기
             incorrectAngle++
         }
-
-        // 손목의 높이가 상승 곡선에서 꼭짓점을 찍고 하강하는 경우
-        if (increased && beforeWrist > yWrist + 1) {
-            increased = false
-            maxHeight = yWrist
-        }
-        // 손목의 높이가 하강 곡선에서 꼭짓점을 찍고 상승하는 경우
-        else if (!increased && beforeWrist < yWrist - 1) {
-            increased = true
-            minHeight = yWrist
-
-            val num = if (maxHeight > minHeight) maxHeight - minHeight else minHeight - maxHeight
-            wristList.add(num)
-            Log.e(TAG, "${wristList.last()}")
-        }
-
-        beforeWrist = yWrist
     }
 
     private fun convertPoseLabels(pair: Pair<String, Float>?): String {
