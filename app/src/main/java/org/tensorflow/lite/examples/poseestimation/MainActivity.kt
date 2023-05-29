@@ -317,10 +317,6 @@ class MainActivity : AppCompatActivity() {
 
             pressCount = wristList.size
 
-            if(avgMinHeight == 0f && avgMaxHeight == 0f){
-                avgMinHeight = wrist.y
-                avgMaxHeight = wrist.y
-            }
             Log.i(TAG, "최소 평균 " + avgMinHeight)
             Log.i(TAG, "최대 평균 " + avgMaxHeight)
 
@@ -361,8 +357,6 @@ class MainActivity : AppCompatActivity() {
             }
 
             beforeWrist = wrist.y
-            Log.e(TAG, "깊이 " + getCprDepthResult())
-            Log.e(TAG, "속도 " + getCprRateResult())
         }
     }
 
