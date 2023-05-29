@@ -27,12 +27,7 @@ import android.util.Log
 import android.view.SurfaceView
 import android.view.View
 import android.view.WindowManager
-import android.widget.AdapterView
-import android.widget.ArrayAdapter
-import android.widget.CompoundButton
-import android.widget.Spinner
-import android.widget.TextView
-import android.widget.Toast
+import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
@@ -45,13 +40,7 @@ import org.tensorflow.lite.examples.poseestimation.camera.CameraSource
 import org.tensorflow.lite.examples.poseestimation.data.BodyPart
 import org.tensorflow.lite.examples.poseestimation.data.Device
 import org.tensorflow.lite.examples.poseestimation.data.Person
-import org.tensorflow.lite.examples.poseestimation.ml.ModelType
-import org.tensorflow.lite.examples.poseestimation.ml.MoveNet
-import org.tensorflow.lite.examples.poseestimation.ml.MoveNetMultiPose
-import org.tensorflow.lite.examples.poseestimation.ml.PoseClassifier
-import org.tensorflow.lite.examples.poseestimation.ml.PoseNet
-import org.tensorflow.lite.examples.poseestimation.ml.TrackerType
-import org.tensorflow.lite.examples.poseestimation.ml.Type
+import org.tensorflow.lite.examples.poseestimation.ml.*
 import kotlin.math.abs
 
 class MainActivity : AppCompatActivity() {
@@ -93,8 +82,12 @@ class MainActivity : AppCompatActivity() {
     var incorrectAngle: Int = 0
     var compressionRate: Int = 0
     var pressDepth: Int = 0
+    var pressCount: Int = 0
     private var maxHeight = 0f
+    private var avgMaxHeight = 0f
     private var minHeight = 0f
+    private var avgMinHeight = 0f
+    private var avgDepth = 0f
     private var beforeWrist = 0f
     private var increased = true
     private var wristList = arrayListOf<Float>()
@@ -301,36 +294,96 @@ class MainActivity : AppCompatActivity() {
         }
 
         measureIsPreparing(person)
-        //measureElbowDegree(person)
-        //measureCprRate(person)
+        measureElbowDegree(person)
+        measureCprRate(person)
     }
 
+    /*CPR 속도 측정*/
+    /*예진 수정*/
     private fun measureCprRate(person: Person) {
         lateinit var wrist: PointF
 
-        person.keyPoints.forEach { point ->
-            when (point.bodyPart) {
-                BodyPart.LEFT_WRIST -> { wrist = point.coordinate }
-                else -> {}
+        //정확도 0.4이상인 것만 계산
+        if(person.score  > 0.4) {
+            person.keyPoints.forEach { point ->
+                when (point.bodyPart) {
+                    BodyPart.LEFT_WRIST -> {
+                        wrist = point.coordinate
+                    }
+                    else -> {}
+                }
             }
-        }
+            Log.i(TAG, wrist.y.toString())
 
-        // 손목의 높이가 상승 곡선에서 꼭짓점을 찍고 하강하는 경우
-        if (increased && beforeWrist > wrist.y + 1) {
-            increased = false
-            maxHeight = wrist.y
-        }
-        // 손목의 높이가 하강 곡선에서 꼭짓점을 찍고 상승하는 경우
-        else if (!increased && beforeWrist < wrist.y - 1) {
-            increased = true
-            minHeight = wrist.y
+            pressCount = wristList.size
 
-            val num = if (maxHeight > minHeight) maxHeight - minHeight else minHeight - maxHeight
-            wristList.add(num)
-            Log.e(TAG, "${wristList.last()}")
-        }
+            if(avgMinHeight == 0f && avgMaxHeight == 0f){
+                avgMinHeight = wrist.y
+                avgMaxHeight = wrist.y
+            }
+            Log.i(TAG, "최소 평균 " + avgMinHeight)
+            Log.i(TAG, "최대 평균 " + avgMaxHeight)
 
-        beforeWrist = wrist.y
+            // 손목의 높이가 상승 곡선에서 꼭짓점을 찍고 하강하는 경우
+            if (increased && beforeWrist > wrist.y + 1) {
+                // 고점 이상값인지 검증
+                avgMaxHeight = (avgMaxHeight * pressCount + wrist.y)/(pressCount + 1)
+                Log.i(TAG, "고점 이상값 " + (avgMaxHeight - wrist.y).toString())
+                if(Math.abs(avgMaxHeight - wrist.y) < 50){
+                    //이상값이 아니라 판단되면 고점 등록
+                    increased = false
+                    maxHeight = beforeWrist
+                    Log.i(TAG, "평균 " + avgMaxHeight + " 고점 " + maxHeight)
+                }
+            }
+
+            // 손목의 높이가 하강 곡선에서 꼭짓점을 찍고 상승하는 경우
+            else if (!increased && beforeWrist < wrist.y - 1) {
+                // 저점 이상값인지 검증
+                avgMinHeight = (avgMinHeight * pressCount + wrist.y)/(pressCount + 1)
+                Log.i(TAG, "저점 이상값 " + (avgMinHeight - wrist.y).toString())
+                if(Math.abs(avgMinHeight - wrist.y) < 50){
+                    //이상값이 아니라 판단되면 저점 등록
+                    increased = true
+                    minHeight = beforeWrist
+                    Log.i(TAG, "평균 " + avgMinHeight + " 저점 " + minHeight)
+
+                    //depth 등록
+                    val depth = maxHeight - minHeight;
+                    if(depth > 0) {
+                        Log.i(TAG, "깊이 : " + depth.toString())
+                        wristList.add(depth)
+                    }
+
+                    Log.e(TAG, "개수 " +  wristList.size.toString())
+                    Log.e(TAG, "${wristList.last()}")
+                }
+            }
+
+            beforeWrist = wrist.y
+            Log.e(TAG, "깊이 " + getCprDepthResult())
+            Log.e(TAG, "속도 " + getCprRateResult())
+        }
+    }
+
+    private fun getCprRateResult() : Double{
+        pressCount = wristList.size
+        var minutes = 60.0*2.0
+        //per sec 기준
+        return pressCount/minutes
+    }
+
+    private fun getCprDepthResult() : Float{
+        pressCount = wristList.size
+        var min = Float.MAX_VALUE;
+        var max = 0f;
+        var depth = 0f;
+        for(w in wristList){
+            if(w < min) min = w;
+            else if (w > max) max = w;
+            depth += w
+        }
+        return (depth - min - max) / (pressCount - 2)
     }
 
     private fun measureIsPreparing(person: Person) : Boolean {
