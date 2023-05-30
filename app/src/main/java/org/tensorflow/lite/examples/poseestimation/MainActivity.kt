@@ -213,7 +213,7 @@ class MainActivity : AppCompatActivity() {
                         surfaceView,
                         object : CameraSource.CameraSourceListener {
                             override fun onFPSListener(fps: Int) {
-//                                tvFPS.text = getString(R.string.tfe_pe_tv_fps, fps)
+                                tvFPS.text = getString(R.string.tfe_pe_tv_fps, fps)
                             }
 
                             override fun onDetectedInfo(
@@ -223,13 +223,7 @@ class MainActivity : AppCompatActivity() {
                             ) {
                                 tvScore.text = getString(R.string.tfe_pe_tv_score, personScore ?: 0f)
 
-                                // TODO: poseLabels: 현재 취하고 있는 자세 타입에 대한 정보를 Pair(label, percent) 타입으로 제공
-                                // TODO: ex) poseLabels = {{"cpr", 0.94}, {"not_cpr", 0.06}}
                                 poseLabels?.sortedByDescending { it.second }?.let {
-                                    // tvClassificationValue1~3: 현재 취하고 있는 자세 타입 1,2,3 순위 표시
-                                    // if(it[0].first == "cpr") {
-                                        // 3초 카운팅 시작
-                                    // }
                                     tvClassificationValue1.text = getString(
                                         R.string.tfe_pe_tv_classification_value,
                                         convertPoseLabels(if (it.isNotEmpty()) it[0] else null)
@@ -267,32 +261,7 @@ class MainActivity : AppCompatActivity() {
      * CPR 자세 인식
      */
     private fun measureCprScore(person: Person) {
-        var xShoulder = .0f
-        var yShoulder = .0f
-        var xElbow = .0f
-        var yElbow = .0f
-        var xWrist = .0f
-        var yWrist = .0f
-
-        // person이 갖고 있는 관절 데이터들에서 어깨, 팔꿈치, 손목 데이터 추출 (현재 임시로 왼쪽 관절만 추출한 상태)
-        person.keyPoints.forEach { point ->
-            when (point.bodyPart) {
-                BodyPart.LEFT_SHOULDER -> {
-                    xShoulder = point.coordinate.x
-                    yShoulder = point.coordinate.y
-                }
-                BodyPart.LEFT_ELBOW -> {
-                    xElbow = point.coordinate.x
-                    yElbow = point.coordinate.y
-                }
-                BodyPart.LEFT_WRIST -> {
-                    xWrist = point.coordinate.x
-                    yWrist = point.coordinate.y
-                }
-                else -> {}
-            }
-        }
-
+        // CPR 준비 자세인지 측정
         measureIsPreparing(person)
         measureElbowDegree(person)
         measureCprRate(person)
@@ -381,36 +350,60 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun measureIsPreparing(person: Person) : Boolean {
-        lateinit var shoulder: PointF
-        lateinit var elbow: PointF
-        lateinit var wrist: PointF
-        lateinit var hip: PointF
-        lateinit var knee: PointF
-        lateinit var ankle: PointF
+        lateinit var shoulderLeft: PointF
+        lateinit var shoulderRight: PointF
+
+        lateinit var elbowLeft: PointF
+        lateinit var elbowRight: PointF
+
+        lateinit var wristLeft: PointF
+        lateinit var wristRight: PointF
+
+        lateinit var hipLeft: PointF
+        lateinit var hipRight: PointF
+
+        lateinit var kneeLeft: PointF
+        lateinit var kneeRight: PointF
+
+        lateinit var ankleLeft: PointF
+        lateinit var ankleRight: PointF
 
         person.keyPoints.forEach { point ->
             when (point.bodyPart) {
-                BodyPart.LEFT_SHOULDER -> { shoulder = point.coordinate }
-                BodyPart.LEFT_ELBOW -> { elbow = point.coordinate }
-                BodyPart.LEFT_WRIST -> { wrist = point.coordinate }
-                BodyPart.LEFT_HIP -> { hip = point.coordinate }
-                BodyPart.LEFT_KNEE -> { knee = point.coordinate }
-                BodyPart.LEFT_ANKLE -> { ankle = point.coordinate }
+                BodyPart.LEFT_SHOULDER -> { shoulderLeft = point.coordinate }
+                BodyPart.RIGHT_SHOULDER -> { shoulderRight = point.coordinate }
+                BodyPart.LEFT_ELBOW -> { elbowLeft = point.coordinate }
+                BodyPart.RIGHT_ELBOW -> { elbowRight = point.coordinate }
+                BodyPart.LEFT_WRIST -> { wristLeft = point.coordinate }
+                BodyPart.RIGHT_WRIST -> { wristRight = point.coordinate }
+                BodyPart.LEFT_HIP -> { hipLeft = point.coordinate }
+                BodyPart.RIGHT_HIP -> { hipRight = point.coordinate }
+                BodyPart.LEFT_KNEE -> { kneeLeft = point.coordinate }
+                BodyPart.RIGHT_KNEE -> { kneeRight = point.coordinate }
+                BodyPart.LEFT_ANKLE -> { ankleLeft = point.coordinate }
+                BodyPart.RIGHT_ANKLE -> { ankleRight = point.coordinate }
                 else -> {}
             }
         }
 
-        var isElbowVertical = abs(shoulder.x - elbow.x) < 20 && abs(elbow.x - wrist.x) < 20
-        var isBodyVertical = shoulder.x < hip.x &&  shoulder.y > hip.y
-        var isSeated = knee.x < ankle.x
+        var isElbowLeftVertical = abs(shoulderLeft.x - elbowLeft.x) < 20 && abs(elbowLeft.x - wristLeft.x) < 20
+                                    && wristLeft.y > elbowLeft.y && elbowLeft.y > shoulderLeft.y
+        var isElbowRightVertical = abs(shoulderRight.x - elbowRight.x) < 20 && abs(elbowRight.x - wristRight.x) < 20
+                                    && wristRight.y > elbowRight.y && elbowRight.y > shoulderRight.y
 
-        Log.i(TAG, "shoulder y: " + shoulder.y + ", hip y: " + hip.y)
+        var isBodyLeftVertical = shoulderLeft.x < hipLeft.x &&  shoulderLeft.y < hipLeft.y
+        var isBodyRightVertical = shoulderRight.x < hipRight.x &&  shoulderRight.y < hipRight.y
 
-        Log.i(TAG, "팔이 수직인가요? " + isElbowVertical)
-        Log.i(TAG, "몸이 수직인가요? " + isElbowVertical)
-        Log.i(TAG, "앉아있나요? " + isElbowVertical)
 
-        if (!isElbowVertical || !isBodyVertical || !isSeated) return false
+        var isBodyLeftSeated = hipLeft.x > kneeLeft.x && kneeLeft.x < ankleLeft.x && hipLeft.x < ankleLeft.x
+                                    && hipLeft.y < kneeLeft.y && hipLeft.y < ankleLeft.y && abs(ankleLeft.y - kneeLeft.y) < 20
+        var isBodyRightSeated = hipRight.x > kneeRight.x && kneeRight.x < ankleRight.x && hipRight.x < ankleRight.x
+                                    && hipRight.y < kneeRight.y && hipRight.y < ankleRight.y && abs(ankleRight.y - kneeRight.y) < 20
+
+        val isElbowVertical = isElbowLeftVertical && isElbowRightVertical
+        val isBodyVertical = isBodyLeftVertical && isBodyRightVertical
+        val isBodySeated = isBodyLeftSeated && isBodyRightSeated
+        if (!isElbowVertical || !isBodyVertical || !isBodySeated) return false
 
         Log.i(TAG, "CPR 준비 완료")
         return true
